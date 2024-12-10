@@ -7,6 +7,8 @@ import { HumanMessage } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
 
+import readline from "readline";
+
 // Define the tools for the agent to use
 const tools = [new TavilySearchResults({ maxResults: 3 })];
 const toolNode = new ToolNode(tools);
@@ -48,23 +50,41 @@ const workflow = new StateGraph(MessagesAnnotation)
 // Finally, we compile it into a LangChain Runnable.
 const app = workflow.compile();
 
-// Use the agent
-const finalState = await app.invoke({
-  messages: [new HumanMessage("what is the weather in sf")],
-});
-console.log(finalState.messages[finalState.messages.length - 1].content);
-
-import readline from "readline";
-
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-rl.question("Enter your next query: ", async (userInput) => {
+// Start the conversation with user input
+rl.question("Enter your initial query: ", async (initialInput) => {
+  const initialState = await app.invoke({
+    messages: [new HumanMessage(initialInput)],
+  });
+
+  console.log(initialState.messages[initialState.messages.length - 1].content);
+
+  askUser(initialState);
+});
+
+// Keep on continuing until the user says something like Thank you or that's all or something like that
+async function askUser(finalState: typeof MessagesAnnotation.State) {
+  const userInput = await new Promise<string>((resolve) => {
+    rl.question("Enter your next query: ", resolve);
+  });
+
   const nextState = await app.invoke({
     messages: [...finalState.messages, new HumanMessage(userInput)],
   });
+
   console.log(nextState.messages[nextState.messages.length - 1].content);
-  rl.close();
-});
+
+  const lowerCaseUserInput = userInput.toLowerCase();
+  if (
+    lowerCaseUserInput.includes("thank you") ||
+    lowerCaseUserInput.includes("that's all")
+  ) {
+    rl.close();
+  } else {
+    askUser(nextState);
+  }
+}
