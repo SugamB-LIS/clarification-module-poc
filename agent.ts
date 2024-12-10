@@ -66,7 +66,7 @@ rl.question("Enter your initial query: ", async (initialInput) => {
   askUser(initialState);
 });
 
-// Keep on continuing until the user says something like Thank you or that's all or something like that
+// Continue until the user says Thank you or that's all
 async function askUser(finalState: typeof MessagesAnnotation.State) {
   const userInput = await new Promise<string>((resolve) => {
     rl.question("Enter your next query: ", resolve);
