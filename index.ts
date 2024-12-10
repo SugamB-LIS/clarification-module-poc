@@ -90,7 +90,7 @@ const app = workflow.compile({ checkpointer });
 
 // Use the Runnable
 const finalState = await app.invoke(
-  { messages: [new HumanMessage("what is the weather in sf")] },
+  { messages: [new HumanMessage("what is the weather in nepal")] },
   { configurable: { thread_id: "42" } }
 );
 
