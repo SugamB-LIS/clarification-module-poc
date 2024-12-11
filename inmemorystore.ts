@@ -107,8 +107,10 @@ async function askUser(finalState: typeof StateAnnotation.State) {
     const newThreadId = (
       parseInt(config.configurable.thread_id) + 1
     ).toString();
+    const values = (await graph.getState(config)).values;
+    console.log(values);
+    console.log(`\nSwitching thread to ${newThreadId}\n`);
     config.configurable.thread_id = newThreadId;
-    console.log(`Switching thread to ${newThreadId}`);
   }
 
   const lowerCaseUserInput = userInput.toLowerCase();
