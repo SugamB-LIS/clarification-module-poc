@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { v4 as uuidv4 } from "uuid";
 import { ChatOpenAI } from "@langchain/openai";
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import {
   Annotation,
   StateGraph,
@@ -14,15 +14,10 @@ import {
 } from "@langchain/langgraph";
 import readline from "readline";
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
 const inMemoryStore = new InMemoryStore();
 
 const StateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
+  messages: Annotation<HumanMessage[]>({
     reducer: messagesStateReducer,
     default: () => [],
   }),
@@ -33,7 +28,6 @@ const model = new ChatOpenAI({
   temperature: 0,
 });
 
-// NOTE: we're passing the Store param to the node
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -50,14 +44,8 @@ const callModel = async (
   const info = memories.map((d) => d.value.data).join("\n");
   const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}`;
 
-  // Store new memories if the user asks the model to remember
   const lastMessage = state.messages[state.messages.length - 1];
-  if (
-    typeof lastMessage.content === "string" &&
-    lastMessage.content.toLowerCase().includes("remember")
-  ) {
-    await store.put(namespace, uuidv4(), { data: lastMessage.content });
-  }
+  await store.put(namespace, uuidv4(), { data: lastMessage.content });
 
   const response = await model.invoke([
     { type: "system", content: systemMsg },
@@ -75,39 +63,53 @@ const graph = builder.compile({
   store: inMemoryStore,
 });
 
-async function startConversation(config: LangGraphRunnableConfig) {
-  rl.question("Enter your initial query: ", async (initialInput) => {
-    const initialState = await graph.invoke(
-      {
-        messages: [new HumanMessage(initialInput)],
-      },
-      config
-    );
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
-    console.log(
-      initialState.messages[initialState.messages.length - 1].content
-    );
+let conversationCount = 0;
+const maxConversations = 3;
+let config = { configurable: { thread_id: "1", userId: "1" } };
 
-    askUser(initialState, config);
-  });
-}
+rl.question("Enter your initial query: ", async (initialInput) => {
+  const initialMessage = new HumanMessage(initialInput);
+  const initialState = await graph.invoke(
+    {
+      messages: [initialMessage],
+    },
+    config
+  );
 
-async function askUser(
-  finalState: typeof StateAnnotation.State,
-  config: LangGraphRunnableConfig
-) {
+  console.log(initialState.messages[initialState.messages.length - 1].content);
+
+  askUser(initialState);
+});
+
+async function askUser(finalState: typeof StateAnnotation.State) {
   const userInput = await new Promise<string>((resolve) => {
     rl.question("Enter your next query: ", resolve);
   });
 
+  const userMessage = new HumanMessage(userInput);
   const nextState = await graph.invoke(
     {
-      messages: [...finalState.messages, new HumanMessage(userInput)],
+      messages: [...finalState.messages, userMessage],
     },
     config
   );
 
   console.log(nextState.messages[nextState.messages.length - 1].content);
+
+  conversationCount++;
+  if (conversationCount >= maxConversations) {
+    conversationCount = 0;
+    const newThreadId = (
+      parseInt(config.configurable.thread_id) + 1
+    ).toString();
+    config.configurable.thread_id = newThreadId;
+    console.log(`Switching thread to ${newThreadId}`);
+  }
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
@@ -116,9 +118,6 @@ async function askUser(
   ) {
     rl.close();
   } else {
-    askUser(nextState, config);
+    askUser(nextState);
   }
 }
-
-let config = { configurable: { thread_id: "1", userId: "1" } };
-startConversation(config);

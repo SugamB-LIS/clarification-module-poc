@@ -2,9 +2,9 @@
 import "dotenv/config";
 
 import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
 
 import readline from "readline";
