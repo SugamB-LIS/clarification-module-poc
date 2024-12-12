@@ -50,18 +50,36 @@ const model = new ChatOpenAI({
   temperature: 0,
 });
 
-function determineQuestionType(
+async function determineQuestionType(
   question: HumanMessage
-): "conversational" | "metadata" {
+): Promise<"conversational" | "metadata" | "need clarification"> {
   const keywords = Object.values(fakeMetadata.tables).flatMap(
     (table) => table.columns
   );
 
   const questionContent = (question.content as string).toLowerCase();
-  if (keywords.some((keyword) => questionContent.includes(keyword))) {
+  const response = await model.invoke([
+    {
+      type: "system",
+      content: `
+      Determine if the user input: "${questionContent}" is related to the following database schema and metadata:
+       ${fakeDDL} ${JSON.stringify(
+        fakeMetadata
+      )} or more related to conversational tone or day to day chat. 
+       If it matches exactly then reply with 'metadata'. 
+       If not, then it is about finding the closest possible match than exact value 
+       eg: discount is more closely related to "id", "year", "revenue", "profit" than any normal day to day conversation
+       or any greeting but it is still not exact match so it would be 'need clarification'. 
+       Reply with 'conversational',  'metadata' or 'need clarification' and no other words`,
+    },
+  ]);
+  const questionTypeResponse = response.content.toString();
+  if (questionTypeResponse === "metadata") {
     return "metadata";
+  } else if (questionTypeResponse === "conversational") {
+    return "conversational";
   }
-  return "conversational";
+  return "need clarification";
 }
 
 const callModel = async (
@@ -86,10 +104,16 @@ const callModel = async (
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
 
-  const questionType = determineQuestionType(lastMessage);
-  console.log("\nQuestion type: " + questionType);
+  const questionType = await determineQuestionType(lastMessage);
+  console.log(questionType);
+  const systemMsgBasedonQuestionType = `\n based on ${questionType}, ensure if user query is sufficient enough to answer.
+  1. if it is 'metadata' the reply should be properly formatted question that can be sent to core to fetch the table data, 
+  eg: if user query is about 'profit' the reply can be something like "give me the profit data from the sales table",
+  and do not ask further question, just reply with properly formatted question.
+  2. if it is 'conversational', the reply should be appropriately conversational, and
+  3. if is is 'need clarification', return a clarification question if user query can't be fulfilled`;
   const response = await model.invoke([
-    { type: "system", content: systemMsg },
+    { type: "system", content: systemMsg + systemMsgBasedonQuestionType },
     ...state.messages,
   ]);
   const summary = state.summary;
@@ -154,7 +178,8 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
+// let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
+let config = { configurable: { thread_id: "Dec-12", userId: "1" } };
 
 rl.question("Enter your initial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
