@@ -46,8 +46,11 @@ const callModel = async (
   }
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
-  const info = memories.map((d) => d.value.data).join("\n");
-  const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}. Summary: ${state.summary}`;
+  let info = memories.map((d) => d.value.data).join("\n");
+  // if (state.summary) {
+  //   info = state.summary;
+  // }
+  const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}. \nSummary: ${state.summary}`;
 
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
@@ -78,9 +81,10 @@ async function summarizeConversation(
   if (summary) {
     summaryMessage =
       `This is summary of the conversation to date: ${summary}\n\n` +
-      "Extend the summary by taking into account the new messages above:";
+      "Extend the summary by taking into account the new messages above, but keep the summary one line";
   } else {
-    summaryMessage = "Create a summary of the conversation above:";
+    summaryMessage =
+      "Create a one liner summary to summarize the conversation above:";
   }
 
   const allMessages = [
@@ -97,6 +101,7 @@ async function summarizeConversation(
   if (typeof response.content !== "string") {
     throw new Error("Expected a string response from the model");
   }
+  console.log("\noneliner summary: ", response.content, "\n\n");
   return { summary: response.content, messages: deleteMessages };
 }
 
@@ -117,9 +122,9 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let conversationCount = 0;
-const maxConversations = 6;
-let config = { configurable: { thread_id: "1", userId: "1" } };
+// let conversationCount = 0;
+// const maxConversations = 6;
+let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
 
 rl.question("Enter your initial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
@@ -150,17 +155,17 @@ async function askUser(finalState: typeof StateAnnotation.State) {
 
   console.log(nextState.messages[nextState.messages.length - 1].content);
 
-  conversationCount++;
-  if (conversationCount >= maxConversations) {
-    conversationCount = 0;
-    const newThreadId = (
-      parseInt(config.configurable.thread_id) + 1
-    ).toString();
-    const values = (await graph.getState(config)).values;
-    console.log(values);
-    console.log(`\nSwitching thread to ${newThreadId}\n`);
-    config.configurable.thread_id = newThreadId;
-  }
+  // conversationCount++;
+  // if (conversationCount >= maxConversations) {
+  //   conversationCount = 0;
+  //   const newThreadId = (
+  //     parseInt(config.configurable.thread_id) + 1
+  //   ).toString();
+  //   const values = (await graph.getState(config)).values;
+  //   console.log(values);
+  //   console.log(`\nSwitching thread to ${newThreadId}\n`);
+  //   config.configurable.thread_id = newThreadId;
+  // }
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
