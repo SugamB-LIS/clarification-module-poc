@@ -122,8 +122,6 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-// let conversationCount = 0;
-// const maxConversations = 6;
 let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
 
 rl.question("Enter your initial query: ", async (initialInput) => {
@@ -155,17 +153,8 @@ async function askUser(finalState: typeof StateAnnotation.State) {
 
   console.log(nextState.messages[nextState.messages.length - 1].content);
 
-  // conversationCount++;
-  // if (conversationCount >= maxConversations) {
-  //   conversationCount = 0;
-  //   const newThreadId = (
-  //     parseInt(config.configurable.thread_id) + 1
-  //   ).toString();
-  //   const values = (await graph.getState(config)).values;
-  //   console.log(values);
-  //   console.log(`\nSwitching thread to ${newThreadId}\n`);
-  //   config.configurable.thread_id = newThreadId;
-  // }
+  const values = (await graph.getState(config)).values;
+  console.log("\n", values, "\n");
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
