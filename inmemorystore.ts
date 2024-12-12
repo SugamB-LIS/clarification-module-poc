@@ -1,5 +1,4 @@
 import "dotenv/config";
-
 import { v4 as uuidv4 } from "uuid";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, RemoveMessage } from "@langchain/core/messages";
@@ -17,6 +16,24 @@ import readline from "readline";
 
 const inMemoryStore = new InMemoryStore();
 
+// Fake DDL and metadata
+const fakeDDL = `
+  CREATE TABLE sales (
+    id INT,
+    year INT,
+    revenue DECIMAL,
+    profit DECIMAL
+  );
+`;
+
+const fakeMetadata = {
+  tables: {
+    sales: {
+      columns: ["id", "year", "revenue", "profit"],
+    },
+  },
+};
+
 const StateAnnotation = Annotation.Root({
   messages: Annotation<HumanMessage[]>({
     reducer: messagesStateReducer,
@@ -33,6 +50,20 @@ const model = new ChatOpenAI({
   temperature: 0,
 });
 
+function determineQuestionType(
+  question: HumanMessage
+): "conversational" | "metadata" {
+  const keywords = Object.values(fakeMetadata.tables).flatMap(
+    (table) => table.columns
+  );
+
+  const questionContent = (question.content as string).toLowerCase();
+  if (keywords.some((keyword) => questionContent.includes(keyword))) {
+    return "metadata";
+  }
+  return "conversational";
+}
+
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -46,15 +77,17 @@ const callModel = async (
   }
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
-  let info = memories.map((d) => d.value.data).join("\n");
-  // if (state.summary) {
-  //   info = state.summary;
-  // }
-  const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}. \nSummary: ${state.summary}`;
+  const info = memories.map((d) => d.value.data).join("\n");
+  const systemMsg = `You are a helpful assistant with access to the following 
+  database schema and metadata: ${fakeDDL} ${JSON.stringify(
+    fakeMetadata
+  )}. User info: ${info}. \nSummary: ${state.summary}`;
 
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
 
+  const questionType = determineQuestionType(lastMessage);
+  console.log("\nQuestion type: " + questionType);
   const response = await model.invoke([
     { type: "system", content: systemMsg },
     ...state.messages,
@@ -101,7 +134,6 @@ async function summarizeConversation(
   if (typeof response.content !== "string") {
     throw new Error("Expected a string response from the model");
   }
-  console.log("\noneliner summary: ", response.content, "\n\n");
   return { summary: response.content, messages: deleteMessages };
 }
 
@@ -152,9 +184,6 @@ async function askUser(finalState: typeof StateAnnotation.State) {
   );
 
   console.log(nextState.messages[nextState.messages.length - 1].content);
-
-  const values = (await graph.getState(config)).values;
-  console.log("\n", values, "\n");
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
