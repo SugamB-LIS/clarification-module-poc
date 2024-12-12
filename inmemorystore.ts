@@ -2,12 +2,7 @@ import "dotenv/config";
 
 import { v4 as uuidv4 } from "uuid";
 import { ChatOpenAI } from "@langchain/openai";
-import {
-  SystemMessage,
-  HumanMessage,
-  AIMessage,
-  RemoveMessage,
-} from "@langchain/core/messages";
+import { HumanMessage, RemoveMessage } from "@langchain/core/messages";
 import {
   Annotation,
   StateGraph,
@@ -37,7 +32,7 @@ const model = new ChatOpenAI({
   model: "gpt-4o-mini",
   temperature: 0,
 });
-//todo: update the store with the summary after summarization is done
+
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -52,7 +47,7 @@ const callModel = async (
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
-  const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}`;
+  const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}. Summary: ${state.summary}`;
 
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
@@ -69,23 +64,18 @@ const shouldContinue = (
   state: typeof StateAnnotation.State
 ): "summarize_conversation" | typeof END => {
   const messages = state.messages;
-  // If there are more than six messages, then we summarize the conversation
   if (messages.length > 6) {
     return "summarize_conversation";
   }
-  // Otherwise we can just end
   return END;
 };
 
 async function summarizeConversation(
   state: typeof StateAnnotation.State
 ): Promise<{ messages: any[]; summary: string }> {
-  // First, we summarize the conversation
   const { summary, messages } = state;
   let summaryMessage: string;
   if (summary) {
-    // If a summary already exists, we use a different system prompt
-    // to summarize it than if one didn't
     summaryMessage =
       `This is summary of the conversation to date: ${summary}\n\n` +
       "Extend the summary by taking into account the new messages above:";
@@ -101,8 +91,6 @@ async function summarizeConversation(
     }),
   ];
   const response = await model.invoke(allMessages);
-  // We now need to delete messages that we no longer want to show up
-  // I will delete all but the last two messages, but you can change this
   const deleteMessages = messages
     .slice(0, -2)
     .map((m) => new RemoveMessage({ id: m.id ?? "" }));
@@ -113,21 +101,10 @@ async function summarizeConversation(
 }
 
 const builder = new StateGraph(StateAnnotation)
-  // Define the conversation node and the summarize node
   .addNode("call_model", callModel)
   .addNode("summarize_conversation", summarizeConversation)
-  // Set the entrypoint as conversation
   .addEdge(START, "call_model")
-  // We now add a conditional edge
-  .addConditionalEdges(
-    // First, we define the start node. We use `conversation`.
-    // This means these are the edges taken after the `conversation` node is called.
-    "call_model",
-    // Next, we pass in the function that will determine which node is called next.
-    shouldContinue
-  )
-  // We now add a normal edge from `summarize_conversation` to END.
-  // This means that after `summarize_conversation` is called, we end.
+  .addConditionalEdges("call_model", shouldContinue)
   .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
