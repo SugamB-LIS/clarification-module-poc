@@ -22,14 +22,16 @@ const fakeDDL = `
     id INT,
     year INT,
     revenue DECIMAL,
-    profit DECIMAL
+    profit DECIMAL,
+    discount DECIMAL,
+    tax DECIMAL,
   );
 `;
 
 const fakeMetadata = {
   tables: {
     sales: {
-      columns: ["id", "year", "revenue", "profit"],
+      columns: ["id", "year", "revenue", "profit", "discount", "tax"],
     },
   },
 };
@@ -103,13 +105,14 @@ const callModel = async (
 
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
-
+  // console.log("lastMessage.content", lastMessage.content);
   const questionType = await determineQuestionType(lastMessage);
-  console.log(questionType);
+  console.log("**", questionType, "**\n");
+
   const systemMsgBasedonQuestionType = `\n based on ${questionType}, ensure if user query is sufficient enough to answer.
   1. if it is 'metadata' the reply should be properly formatted question that can be sent to core to fetch the table data, 
-  eg: if user query is about 'profit' the reply can be something like "give me the profit data from the sales table",
-  and do not ask further question, just reply with properly formatted question.
+  eg: if user query is about 'profit' the reply can be something like "give me the profit data from the ... table",
+   !important: do not ask further question, just reply with properly formatted question.
   2. if it is 'conversational', the reply should be appropriately conversational, and
   3. if is is 'need clarification', return a clarification question if user query can't be fulfilled`;
   const response = await model.invoke([
@@ -181,7 +184,7 @@ const rl = readline.createInterface({
 // let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
 let config = { configurable: { thread_id: "Dec-12", userId: "1" } };
 
-rl.question("Enter your initial query: ", async (initialInput) => {
+rl.question("\nInitial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
   const initialState = await graph.invoke(
     {
@@ -190,14 +193,17 @@ rl.question("Enter your initial query: ", async (initialInput) => {
     config
   );
 
-  console.log(initialState.messages[initialState.messages.length - 1].content);
+  console.log(
+    "AI:",
+    initialState.messages[initialState.messages.length - 1].content
+  );
 
   askUser(initialState);
 });
 
 async function askUser(finalState: typeof StateAnnotation.State) {
   const userInput = await new Promise<string>((resolve) => {
-    rl.question("Enter your next query: ", resolve);
+    rl.question("\nNext query: ", resolve);
   });
 
   const userMessage = new HumanMessage(userInput);
