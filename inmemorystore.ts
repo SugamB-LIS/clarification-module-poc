@@ -109,12 +109,31 @@ const callModel = async (
   const questionType = await determineQuestionType(lastMessage);
   console.log("**", questionType, "**\n");
 
-  const systemMsgBasedonQuestionType = `\n based on ${questionType}, ensure if user query is sufficient enough to answer.
-  1. if it is 'metadata' the reply should be properly formatted question that can be sent to core to fetch the table data, 
-  eg: if user query is about 'profit' the reply can be something like "give me the profit data from the ... table",
-   !important: do not ask further question, just reply with properly formatted question.
-  2. if it is 'conversational', the reply should be appropriately conversational, and
-  3. if is is 'need clarification', return a clarification question if user query can't be fulfilled`;
+  const systemMsgBasedonQuestionType = `\n 
+  Ensure that the response to a user's query is aligned with the specified ${questionType} by following these rules:
+
+1. **Review Context**: 
+   - Check the current query against the previous conversation history to identify if the same or similar query has already been addressed. 
+   - If a clarification for a similar query was previously provided and a metadata-based answer was given, respond with the same metadata-based answer for consistency.
+   - Use the user reply to clarification question to provide a condensed question that uses the wording from clarification to make the question more precise. 
+      eg: "show me the [something related but not in metadata] for [year]" will have clarification reply like "formula = column/column" and that should be part of the final question like : 
+      "give [or any verb like fetch/show] me the [columns] for [year] for [formula]" 
+2. **Respond Based on ${questionType}**:  
+   - **If ${questionType} is 'metadata'**:  
+     Provide a precisely formatted query in natural language that can be used to retrieve the necessary table data. For example, if the user query relates to 'profit,' respond with something like:  
+     "Fetch the profit data from the [table name] table"
+     **Important**: For 'metadata' queries, do not ask for further clarification—only provide the properly formatted query.  
+   - **If ${questionType} is 'conversational'**:  
+     Craft a response that is appropriately conversational in tone and content.  
+   - **If ${questionType} is 'need clarification'**:  
+     If the user's query lacks sufficient detail to proceed, respond with a clear clarification question to gather the necessary information.  
+3. **Provide Succint Answer **:
+     Provide a succinct answer that accurately answers the user's query. Do not provide a detailed answer or a summary.
+4. **Avoid Conversational Words**:
+   Avoid using words like 'please', 'thank you', or 'can you' in your response.
+5. **Ensure Proper Formatting**:
+   Format your response in a clear and concise manner. Use proper grammar and punctuation.  
+`;
   const response = await model.invoke([
     { type: "system", content: systemMsg + systemMsgBasedonQuestionType },
     ...state.messages,
@@ -182,7 +201,7 @@ const rl = readline.createInterface({
 });
 
 // let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
-let config = { configurable: { thread_id: "Dec-12", userId: "1" } };
+let config = { configurable: { thread_id: "Dec-13", userId: "1" } };
 
 rl.question("\nInitial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
