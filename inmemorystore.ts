@@ -14,6 +14,7 @@ import {
 } from "@langchain/langgraph";
 import readline from "readline";
 import { getPrompt } from "./prompt";
+import { getStockMovement } from "./stock_movement";
 
 const inMemoryStore = new InMemoryStore();
 
@@ -27,8 +28,9 @@ const fakeDDL = `
     discount DECIMAL,
     tax DECIMAL,
   );
-`;
-
+  `;
+const metricDefinition = getStockMovement();
+// const metricDefinition = `Metric Definition: sources:- table: dm_rtl_stock_movement  joins: []metrics:  profit:    name: profit    synonym:    - margin    - total profit    - total margin    - gross profit    description: profit is the difference between sales amount and cost amount    calculation: '[sales_amount] - [sales_cost]'    granularity:    - item    - location    - dayattributes:  department:    name: department    description: department id and department description    include:    - department_id    - department_description  sales_amount:    name: Sales Amount    synonym:    - sales value    description: sales amount    calculation: '[sales_amount]'    granularity:    - item    - location    - day    type: number    column: sales_amount    desc: Sales Amount  sales_cost:    name: Sales Cost    synonym:    - cost of goods sold    - cogs    description: sales cost    calculation: '[sales_cost]'    type: number    column: sales_cost    desc: Sales Costcolumns:  department_id:    name: Department ID    type: varchar    column: department_id    desc: Department ID    primary_key: false  department_description:    name: Department Description    type: varchar    column: department_description    desc: Department Description    primary_key: falsefunctions: No Functions MatchedTAGS INFORMATION:- "\n    (STRICTLY FOLLOW THE TAGS AND THEIR PROVIDED DEFINITION)\n    - name: Defines\  \ the name of the metric (used as search parameter)\n    - desc: description of\  \ the metric or the column or the attribute\n    - synonym: list of alternate names\  \ for the metric or the column or the attribute (used as search paramater)\n   \  \ - calculation: Defines the formula that is used to calculate the metric (Strictly\  \ follow this formula whenever possible)\n    - include: The column names defined\  \ under 'include' tag should always be additionally included in the final table\  \ result along with other required columns. Strictly ensure that the column names\  \ are included in the final table\n    - filters: These are the filters that should\  \ be strictly included in the SQL query\n    - granularity: defines the granularity\  \ of the data related to the metric that the table contains\n    "`;
 const fakeMetadata = {
   tables: {
     sales: {
@@ -59,21 +61,22 @@ async function determineQuestionType(
   const keywords = Object.values(fakeMetadata.tables).flatMap(
     (table) => table.columns
   );
-
+  // ${fakeDDL} ${JSON.stringify(
+  //   fakeMetadata
+  // )}
   const questionContent = (question.content as string).toLowerCase();
   const response = await model.invoke([
     {
       type: "system",
       content: `
-      Determine if the user input: "${questionContent}" is related to the following database schema and metadata:
-       ${fakeDDL} ${JSON.stringify(
-        fakeMetadata
-      )} or more related to conversational tone or day to day chat. 
+      Determine if the user input: "${questionContent}" and previous conversation is related to the following database schema and metadata:
+         ${metricDefinition} or more related to conversational tone or day to day chat. 
        If it matches exactly then reply with 'metadata'. 
        If not, then it is about finding the closest possible match than exact value 
        eg: discount is more closely related to "id", "year", "revenue", "profit" than any normal day to day conversation
        or any greeting but it is still not exact match so it would be 'need clarification'. 
-       Reply with 'conversational',  'metadata' or 'need clarification' and no other words`,
+       If a clarification or metadata-based response has already been provided, use the established context to avoid redundant questions. 
+       Reply with 'conversational',  'metadata', or 'need clarification' and no other words`,
     },
   ]);
   const questionTypeResponse = response.content.toString();
@@ -100,10 +103,10 @@ const callModel = async (
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
   const systemMsg = `You are a helpful assistant with access to the following 
-  database schema and metadata: ${fakeDDL} ${JSON.stringify(
-    fakeMetadata
-  )}. User info: ${info}. \nSummary: ${state.summary}`;
-
+  database schema and metadata: ${metricDefinition}. User info: ${info}. \nSummary: ${state.summary}`;
+  // database schema and metadata: ${fakeDDL} ${JSON.stringify(
+  //   fakeMetadata
+  // )}
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
   // console.log("lastMessage.content", lastMessage.content);
@@ -176,8 +179,8 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-// let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
-let config = { configurable: { thread_id: "Dec-13", userId: "1" } };
+let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
+// let config = { configurable: { thread_id: "Dec-13", userId: "1" } };
 
 rl.question("\nInitial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
