@@ -18,26 +18,7 @@ import { getStockMovement } from "./stock_movement";
 
 const inMemoryStore = new InMemoryStore();
 
-// Fake DDL and metadata
-const fakeDDL = `
-  CREATE TABLE sales (
-    id INT,
-    year INT,
-    revenue DECIMAL,
-    profit DECIMAL,
-    discount DECIMAL,
-    tax DECIMAL,
-  );
-  `;
 const metricDefinition = getStockMovement();
-// const metricDefinition = `Metric Definition: sources:- table: dm_rtl_stock_movement  joins: []metrics:  profit:    name: profit    synonym:    - margin    - total profit    - total margin    - gross profit    description: profit is the difference between sales amount and cost amount    calculation: '[sales_amount] - [sales_cost]'    granularity:    - item    - location    - dayattributes:  department:    name: department    description: department id and department description    include:    - department_id    - department_description  sales_amount:    name: Sales Amount    synonym:    - sales value    description: sales amount    calculation: '[sales_amount]'    granularity:    - item    - location    - day    type: number    column: sales_amount    desc: Sales Amount  sales_cost:    name: Sales Cost    synonym:    - cost of goods sold    - cogs    description: sales cost    calculation: '[sales_cost]'    type: number    column: sales_cost    desc: Sales Costcolumns:  department_id:    name: Department ID    type: varchar    column: department_id    desc: Department ID    primary_key: false  department_description:    name: Department Description    type: varchar    column: department_description    desc: Department Description    primary_key: falsefunctions: No Functions MatchedTAGS INFORMATION:- "\n    (STRICTLY FOLLOW THE TAGS AND THEIR PROVIDED DEFINITION)\n    - name: Defines\  \ the name of the metric (used as search parameter)\n    - desc: description of\  \ the metric or the column or the attribute\n    - synonym: list of alternate names\  \ for the metric or the column or the attribute (used as search paramater)\n   \  \ - calculation: Defines the formula that is used to calculate the metric (Strictly\  \ follow this formula whenever possible)\n    - include: The column names defined\  \ under 'include' tag should always be additionally included in the final table\  \ result along with other required columns. Strictly ensure that the column names\  \ are included in the final table\n    - filters: These are the filters that should\  \ be strictly included in the SQL query\n    - granularity: defines the granularity\  \ of the data related to the metric that the table contains\n    "`;
-const fakeMetadata = {
-  tables: {
-    sales: {
-      columns: ["id", "year", "revenue", "profit", "discount", "tax"],
-    },
-  },
-};
 
 const StateAnnotation = Annotation.Root({
   messages: Annotation<HumanMessage[]>({
@@ -58,12 +39,6 @@ const model = new ChatOpenAI({
 async function determineQuestionType(
   question: HumanMessage
 ): Promise<"conversational" | "metadata" | "need clarification"> {
-  const keywords = Object.values(fakeMetadata.tables).flatMap(
-    (table) => table.columns
-  );
-  // ${fakeDDL} ${JSON.stringify(
-  //   fakeMetadata
-  // )}
   const questionContent = (question.content as string).toLowerCase();
   const response = await model.invoke([
     {
@@ -104,12 +79,10 @@ const callModel = async (
   const info = memories.map((d) => d.value.data).join("\n");
   const systemMsg = `You are a helpful assistant with access to the following 
   database schema and metadata: ${metricDefinition}. User info: ${info}. \nSummary: ${state.summary}`;
-  // database schema and metadata: ${fakeDDL} ${JSON.stringify(
-  //   fakeMetadata
-  // )}
+
   const lastMessage = state.messages[state.messages.length - 1];
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
-  // console.log("lastMessage.content", lastMessage.content);
+
   const questionType = await determineQuestionType(lastMessage);
   console.log("**", questionType, "**\n");
   const systemMsgBasedonQuestionType = getPrompt(questionType);
@@ -201,7 +174,7 @@ rl.question("\nInitial query: ", async (initialInput) => {
 
 async function askUser(finalState: typeof StateAnnotation.State) {
   const userInput = await new Promise<string>((resolve) => {
-    rl.question("\nNext query: ", resolve);
+    rl.question("\nUser: ", resolve);
   });
 
   const userMessage = new HumanMessage(userInput);
@@ -212,7 +185,7 @@ async function askUser(finalState: typeof StateAnnotation.State) {
     config
   );
 
-  console.log(nextState.messages[nextState.messages.length - 1].content);
+  console.log("AI:", nextState.messages[nextState.messages.length - 1].content);
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
