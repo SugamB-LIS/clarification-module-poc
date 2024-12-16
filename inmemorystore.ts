@@ -78,14 +78,20 @@ const callModel = async (
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
   const systemMsg = `You are a helpful assistant with access to the following 
-  database schema and metadata: ${metricDefinition}. User info: ${info}. \nSummary: ${state.summary}`;
-
+  database schema and metadata: ${metricDefinition}. \nUser query: ${info}. \nSummary: ${state.summary}`;
   const lastMessage = state.messages[state.messages.length - 1];
-  await store.put(namespace, uuidv4(), { data: lastMessage.content });
 
-  const questionType = await determineQuestionType(lastMessage);
-  console.log("**", questionType, "**\n");
-  const systemMsgBasedonQuestionType = getPrompt(questionType);
+  // Call determineQuestionType with the concatenated information
+  // const questionType = await determineQuestionType(
+  //   new HumanMessage(info + "\n" + lastMessage.content)
+  // );
+
+  await store.put(namespace, uuidv4(), { data: lastMessage.content });
+  // console.log("state msg: ", ...state.messages);
+  // console.log("**", questionType, "**\n");
+  // const systemMsgBasedonQuestionType = getPrompt(questionType);
+  const systemMsgBasedonQuestionType = getPrompt();
+
   const response = await model.invoke([
     { type: "system", content: systemMsg + systemMsgBasedonQuestionType },
     ...state.messages,
@@ -137,10 +143,10 @@ async function summarizeConversation(
 
 const builder = new StateGraph(StateAnnotation)
   .addNode("call_model", callModel)
-  .addNode("summarize_conversation", summarizeConversation)
-  .addEdge(START, "call_model")
-  .addConditionalEdges("call_model", shouldContinue)
-  .addEdge("summarize_conversation", END);
+  // .addNode("summarize_conversation", summarizeConversation)
+  .addEdge(START, "call_model");
+// .addConditionalEdges("call_model", shouldContinue);
+// .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
   checkpointer: new MemorySaver(),
@@ -153,7 +159,6 @@ const rl = readline.createInterface({
 });
 
 let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
-// let config = { configurable: { thread_id: "Dec-13", userId: "1" } };
 
 rl.question("\nInitial query: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
