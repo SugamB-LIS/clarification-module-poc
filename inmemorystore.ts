@@ -14,11 +14,11 @@ import {
 } from "@langchain/langgraph";
 import readline from "readline";
 import { getPrompt } from "./prompt";
-import { getStockMovement } from "./stock_movement";
+import { getMergedMetadata } from "./merged_metadata";
 
 const inMemoryStore = new InMemoryStore();
 
-const metricDefinition = getStockMovement();
+const metricDefinition = getMergedMetadata();
 
 const StateAnnotation = Annotation.Root({
   messages: Annotation<HumanMessage[]>({

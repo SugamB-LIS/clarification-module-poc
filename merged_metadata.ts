@@ -1,4 +1,4 @@
-export const getStockMovement = () => `
+export const getMergedMetadata = () => `
     "merged_metadata": [
       "profit",
       "Return Sales Quantity",
