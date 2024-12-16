@@ -27,6 +27,7 @@ Append your reasoning on why you gave that particular output
       Example: term like "profit" is present in metadata but there are multiple terms related to that term so user need to clarify the specific term. So, list ALL of the related terms in new lines without skipping any and ask the user which particular term they want to use 
    - Provide a concise, natural-language query to retrieve the required data based on the user's inputs. 
 - **If user input can be answered with 'conversational'**:  
+   - If a query seems like a typo, ask if the user meant something close to the typo.
    - Respond in a conversational tone that aligns with the user's input while maintaining context.   
 - **If user input can be answered with 'need clarification'**:  
    - Ask for further clarification when the term is ambiguous
