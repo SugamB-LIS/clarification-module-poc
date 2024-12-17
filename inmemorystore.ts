@@ -63,7 +63,27 @@ async function determineQuestionType(
   }
   return "need clarification";
 }
+async function isItEnglish(
+  question: HumanMessage
+): Promise<"english" | "gibberish"> {
+  const questionContent = (question.content as string).toLowerCase();
+  const response = await model.invoke([
+    {
+      type: "system",
+      content: `
+      Instruction: Only accept english language in query and no other language.
+      Determine if the user input: "${questionContent}" is English or not.
+      Reply with 'english', or 'gibberish' and no other words`,
+    },
+  ]);
+  const questionTypeResponse = response.content.toString();
+  return questionTypeResponse as "english" | "gibberish";
 
+  // if (questionTypeResponse === "gibberish") {
+  //   return "gibberish";
+  // }
+  // return "english";
+}
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -75,12 +95,24 @@ const callModel = async (
   if (!config.configurable?.userId) {
     throw new Error("userId is required in the config");
   }
+  const lastMessage = state.messages[state.messages.length - 1];
+
+  if ((await isItEnglish(lastMessage)) === "gibberish") {
+    // console.log("Inteliome (JS): Please rephrase your question in English");
+    return {
+      messages: [
+        "System accepts only English queries and it cannot be changed yet.",
+      ],
+      summary: "",
+    };
+    // return { messages: [], summary: state.summary };
+  }
+
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
   const systemMsg = `You are a helpful assistant with access to the following 
   database schema and metadata: ${metricDefinition}. \nUser query: ${info}. \nSummary: ${state.summary}`;
-  const lastMessage = state.messages[state.messages.length - 1];
 
   // Call determineQuestionType with the concatenated information
   // const questionType = await determineQuestionType(
@@ -158,7 +190,7 @@ const rl = readline.createInterface({
 
 let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
 
-rl.question("\nInitial query: ", async (initialInput) => {
+rl.question("\nUser: ", async (initialInput) => {
   const initialMessage = new HumanMessage(initialInput);
   const initialState = await graph.invoke(
     {
@@ -168,7 +200,7 @@ rl.question("\nInitial query: ", async (initialInput) => {
   );
 
   console.log(
-    "AI:",
+    "Inteliome (JS):",
     initialState.messages[initialState.messages.length - 1].content
   );
 
@@ -188,7 +220,10 @@ async function askUser(finalState: typeof StateAnnotation.State) {
     config
   );
 
-  console.log("AI:", nextState.messages[nextState.messages.length - 1].content);
+  console.log(
+    "Inteliome (JS):",
+    nextState.messages[nextState.messages.length - 1].content
+  );
 
   const lowerCaseUserInput = userInput.toLowerCase();
   if (
