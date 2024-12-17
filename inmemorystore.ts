@@ -43,7 +43,7 @@ const model = new ChatOpenAI({
 
 async function isItEnglish(
   humanMessage: HumanMessage,
-  aiMessage: HumanMessage
+  aiMessage: AIMessage
 ): Promise<"english" | "gibberish"> {
   const humanMessageContent = (humanMessage.content as string).toLowerCase();
   const aiMessageContent = (aiMessage.content as string).toLowerCase();
@@ -60,6 +60,26 @@ async function isItEnglish(
   return questionTypeResponse as "english" | "gibberish";
 }
 
+function findLastValidAIMessage(messages: AIMessage[]) {
+  const targetMessage =
+    "System accepts only English queries and it cannot be changed yet.";
+  let lastAIMessage = null;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+
+    // Only consider AIMessage
+    if (message instanceof AIMessage) {
+      if (message.content !== targetMessage) {
+        lastAIMessage = message;
+        break;
+      }
+    }
+  }
+
+  return lastAIMessage;
+}
+
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -73,10 +93,18 @@ const callModel = async (
   }
 
   const lastHumanMessage = state.messages[state.messages.length - 1];
-  const lastAIMessage =
+  let lastAIMessage =
     state.messages.length >= 2
       ? state.messages[state.messages.length - 2]
-      : new HumanMessage({ id: uuidv4(), content: "" });
+      : new AIMessage({ id: uuidv4(), content: "" });
+
+  if (
+    lastAIMessage.content ===
+    "System accepts only English queries and it cannot be changed yet."
+  ) {
+    lastAIMessage.content =
+      findLastValidAIMessage(state.messages)?.content || "";
+  }
 
   if ((await isItEnglish(lastHumanMessage, lastAIMessage)) === "gibberish") {
     const aiMessage = new AIMessage({
@@ -89,7 +117,7 @@ const callModel = async (
       summary: "",
     };
   }
-
+  console.log("\n----------------", lastAIMessage.content);
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
@@ -139,13 +167,13 @@ async function summarizeConversation(
     }),
   ];
   const response = await model.invoke(allMessages);
-  const deleteMessages = messages
-    .slice(0, -2)
-    .map((m) => new RemoveMessage({ id: m.id ?? "" }));
+  // const deleteMessages = messages
+  //   .slice(0, -2)
+  //   .map((m) => new RemoveMessage({ id: m.id ?? "" }));
   if (typeof response.content !== "string") {
     throw new Error("Expected a string response from the model");
   }
-  return { summary: response.content, messages: deleteMessages };
+  return { summary: response.content, messages: messages };
 }
 
 const builder = new StateGraph(StateAnnotation)
