@@ -88,9 +88,6 @@ const callModel = async (
   // );
 
   await store.put(namespace, uuidv4(), { data: lastMessage.content });
-  // console.log("state msg: ", ...state.messages);
-  // console.log("**", questionType, "**\n");
-  // const systemMsgBasedonQuestionType = getPrompt(questionType);
   const systemMsgBasedonQuestionType = getPrompt();
 
   const response = await model.invoke([
