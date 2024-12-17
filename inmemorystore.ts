@@ -52,7 +52,9 @@ async function isItEnglish(
       type: "system",
       content: `
       Instruction: Only accept english language in query and no other language.
-      Determine if the user input: "${humanMessageContent}" is English or not based on input as well the previous context of conversation: "${aiMessageContent}"
+      Determine if the user input is English or not based on input as well the previous context of conversation
+      \nPrevious context of conversation: "${aiMessageContent}" 
+      \nUser Input: "${humanMessageContent}"
       Reply with 'english', or 'gibberish' and no other words`,
     },
   ]);
@@ -117,7 +119,7 @@ const callModel = async (
       summary: "",
     };
   }
-  console.log("\n----------------", lastAIMessage.content);
+  // console.log("\n----------------", lastAIMessage.content);
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
@@ -178,10 +180,10 @@ async function summarizeConversation(
 
 const builder = new StateGraph(StateAnnotation)
   .addNode("call_model", callModel)
-  .addNode("summarize_conversation", summarizeConversation)
-  .addEdge(START, "call_model")
-  .addConditionalEdges("call_model", shouldContinue)
-  .addEdge("summarize_conversation", END);
+  // .addNode("summarize_conversation", summarizeConversation)
+  .addEdge(START, "call_model");
+// .addConditionalEdges("call_model", shouldContinue);
+// .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
   checkpointer: new MemorySaver(),
