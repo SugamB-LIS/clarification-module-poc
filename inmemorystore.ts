@@ -2,7 +2,11 @@
 import "dotenv/config";
 import { v4 as uuidv4 } from "uuid";
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, RemoveMessage } from "@langchain/core/messages";
+import {
+  HumanMessage,
+  RemoveMessage,
+  AIMessage,
+} from "@langchain/core/messages";
 import {
   Annotation,
   StateGraph,
@@ -37,53 +41,25 @@ const model = new ChatOpenAI({
   temperature: 0,
 });
 
-async function determineQuestionType(
-  question: HumanMessage
-): Promise<"conversational" | "metadata" | "need clarification"> {
-  const questionContent = (question.content as string).toLowerCase();
-  const response = await model.invoke([
-    {
-      type: "system",
-      content: `
-      Determine if the user input: "${questionContent}" and previous conversation is related to the following database schema and metadata:
-         ${metricDefinition} or more related to conversational tone or day to day chat. 
-       If it matches exactly then reply with 'metadata'. 
-       If not, then it is about finding the closest possible match than exact value 
-       eg: discount is more closely related to "id", "year", "revenue", "profit" than any normal day to day conversation
-       or any greeting but it is still not exact match so it would be 'need clarification'. 
-       If a clarification or metadata-based response has already been provided, use the established context to avoid redundant questions. 
-       Reply with 'conversational',  'metadata', or 'need clarification' and no other words`,
-    },
-  ]);
-  const questionTypeResponse = response.content.toString();
-  if (questionTypeResponse === "metadata") {
-    return "metadata";
-  } else if (questionTypeResponse === "conversational") {
-    return "conversational";
-  }
-  return "need clarification";
-}
 async function isItEnglish(
-  question: HumanMessage
+  humanMessage: HumanMessage,
+  aiMessage: HumanMessage
 ): Promise<"english" | "gibberish"> {
-  const questionContent = (question.content as string).toLowerCase();
+  const humanMessageContent = (humanMessage.content as string).toLowerCase();
+  const aiMessageContent = (aiMessage.content as string).toLowerCase();
   const response = await model.invoke([
     {
       type: "system",
       content: `
       Instruction: Only accept english language in query and no other language.
-      Determine if the user input: "${questionContent}" is English or not.
+      Determine if the user input: "${humanMessageContent}" is English or not based on input as well the previous context of conversation: "${aiMessageContent}"
       Reply with 'english', or 'gibberish' and no other words`,
     },
   ]);
   const questionTypeResponse = response.content.toString();
   return questionTypeResponse as "english" | "gibberish";
-
-  // if (questionTypeResponse === "gibberish") {
-  //   return "gibberish";
-  // }
-  // return "english";
 }
+
 const callModel = async (
   state: typeof StateAnnotation.State,
   config: LangGraphRunnableConfig
@@ -95,17 +71,23 @@ const callModel = async (
   if (!config.configurable?.userId) {
     throw new Error("userId is required in the config");
   }
-  const lastMessage = state.messages[state.messages.length - 1];
 
-  if ((await isItEnglish(lastMessage)) === "gibberish") {
-    // console.log("Inteliome (JS): Please rephrase your question in English");
-    return {
-      messages: [
+  const lastHumanMessage = state.messages[state.messages.length - 1];
+  const lastAIMessage =
+    state.messages.length >= 2
+      ? state.messages[state.messages.length - 2]
+      : new HumanMessage({ id: uuidv4(), content: "" });
+
+  if ((await isItEnglish(lastHumanMessage, lastAIMessage)) === "gibberish") {
+    const aiMessage = new AIMessage({
+      id: uuidv4(),
+      content:
         "System accepts only English queries and it cannot be changed yet.",
-      ],
+    });
+    return {
+      messages: [aiMessage],
       summary: "",
     };
-    // return { messages: [], summary: state.summary };
   }
 
   const namespace = ["memories", config.configurable?.userId];
@@ -114,12 +96,7 @@ const callModel = async (
   const systemMsg = `You are a helpful assistant with access to the following 
   database schema and metadata: ${metricDefinition}. \nUser query: ${info}. \nSummary: ${state.summary}`;
 
-  // Call determineQuestionType with the concatenated information
-  // const questionType = await determineQuestionType(
-  //   new HumanMessage(info + "\n" + lastMessage.content)
-  // );
-
-  await store.put(namespace, uuidv4(), { data: lastMessage.content });
+  await store.put(namespace, uuidv4(), { data: lastHumanMessage.content });
   const systemMsgBasedonQuestionType = getPrompt();
 
   const response = await model.invoke([
@@ -173,10 +150,10 @@ async function summarizeConversation(
 
 const builder = new StateGraph(StateAnnotation)
   .addNode("call_model", callModel)
-  // .addNode("summarize_conversation", summarizeConversation)
-  .addEdge(START, "call_model");
-// .addConditionalEdges("call_model", shouldContinue);
-// .addEdge("summarize_conversation", END);
+  .addNode("summarize_conversation", summarizeConversation)
+  .addEdge(START, "call_model")
+  .addConditionalEdges("call_model", shouldContinue)
+  .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
   checkpointer: new MemorySaver(),

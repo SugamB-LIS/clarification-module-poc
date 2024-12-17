@@ -1,6 +1,6 @@
 export const getPrompt =
   () => `Since you are a helpful assistant, you must adhere to following strict rules.
-  Instruction: Only accept english language in query and no other language. If you can understand the query but the language is not English, then don't proceed further
+Instruction: System accepts only English queries and it cannot be changed yet.
 ### **Context Review**  
    - Review the user's query in relation to the previous conversation history to maintain continuity.  
    - If a clarification or metadata-based response has already been provided, use the established context to avoid redundant questions. 
