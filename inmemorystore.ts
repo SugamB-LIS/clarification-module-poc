@@ -184,12 +184,13 @@ async function summarizeConversation(
   return { summary: response.content, messages: messages };
 }
 
+/** commenting out the summarizeConversation node as I am not sure if this is needed as it can mess up with the frontend integration */
 const builder = new StateGraph(StateAnnotation)
   .addNode("call_model", callModel)
-  .addNode("summarize_conversation", summarizeConversation)
-  .addEdge(START, "call_model")
-  .addConditionalEdges("call_model", shouldContinue)
-  .addEdge("summarize_conversation", END);
+  // .addNode("summarize_conversation", summarizeConversation)
+  .addEdge(START, "call_model");
+// .addConditionalEdges("call_model", shouldContinue)
+// .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
   checkpointer: new MemorySaver(),
