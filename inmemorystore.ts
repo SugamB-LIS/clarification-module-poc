@@ -62,6 +62,11 @@ async function isItEnglish(
   return questionTypeResponse as "english" | "gibberish";
 }
 
+/**
+ * Given an array of AIMessage, find the last one that is not the one asking
+ * for English language only. This is used to find the last valid AI message
+ * to be used as the context for the next question.
+ */
 function findLastValidAIMessage(messages: AIMessage[]) {
   const targetMessage =
     "System accepts only English queries and it cannot be changed yet.";
@@ -119,7 +124,7 @@ const callModel = async (
       summary: "",
     };
   }
-  // console.log("\n----------------", lastAIMessage.content);
+
   const namespace = ["memories", config.configurable?.userId];
   const memories = await store.search(namespace);
   const info = memories.map((d) => d.value.data).join("\n");
@@ -169,6 +174,7 @@ async function summarizeConversation(
     }),
   ];
   const response = await model.invoke(allMessages);
+  /** commenting out the deleteMessages as I am not sure if this is needed as it can mess up with the frontend integration */
   // const deleteMessages = messages
   //   .slice(0, -2)
   //   .map((m) => new RemoveMessage({ id: m.id ?? "" }));
@@ -180,10 +186,10 @@ async function summarizeConversation(
 
 const builder = new StateGraph(StateAnnotation)
   .addNode("call_model", callModel)
-  // .addNode("summarize_conversation", summarizeConversation)
-  .addEdge(START, "call_model");
-// .addConditionalEdges("call_model", shouldContinue);
-// .addEdge("summarize_conversation", END);
+  .addNode("summarize_conversation", summarizeConversation)
+  .addEdge(START, "call_model")
+  .addConditionalEdges("call_model", shouldContinue)
+  .addEdge("summarize_conversation", END);
 
 const graph = builder.compile({
   checkpointer: new MemorySaver(),
@@ -197,32 +203,31 @@ const rl = readline.createInterface({
 
 let config = { configurable: { thread_id: uuidv4(), userId: "1" } };
 
-rl.question("\nUser: ", async (initialInput) => {
-  const initialMessage = new HumanMessage(initialInput);
-  const initialState = await graph.invoke(
-    {
-      messages: [initialMessage],
-    },
-    config
-  );
-
-  console.log(
-    "Inteliome (JS):",
-    initialState.messages[initialState.messages.length - 1].content
-  );
-
-  askUser(initialState);
-});
-
-async function askUser(finalState: typeof StateAnnotation.State) {
+async function askUser(
+  initialState: typeof StateAnnotation.State = {
+    messages: [],
+    summary: "",
+  }
+) {
   const userInput = await new Promise<string>((resolve) => {
     rl.question("\nUser: ", resolve);
   });
-
+  const lowerCaseUserInput = userInput.toLowerCase();
+  if (
+    lowerCaseUserInput.includes("thank you") ||
+    lowerCaseUserInput.includes("that's all")
+  ) {
+    rl.close();
+    console.log(
+      "Inteliome (JS):",
+      "Thank you for using Inteliome (JS). Have a nice day!"
+    );
+    return;
+  }
   const userMessage = new HumanMessage(userInput);
   const nextState = await graph.invoke(
     {
-      messages: [...finalState.messages, userMessage],
+      messages: [...initialState.messages, userMessage],
     },
     config
   );
@@ -232,13 +237,7 @@ async function askUser(finalState: typeof StateAnnotation.State) {
     nextState.messages[nextState.messages.length - 1].content
   );
 
-  const lowerCaseUserInput = userInput.toLowerCase();
-  if (
-    lowerCaseUserInput.includes("thank you") ||
-    lowerCaseUserInput.includes("that's all")
-  ) {
-    rl.close();
-  } else {
-    askUser(nextState);
-  }
+  askUser(nextState);
 }
+
+askUser();
