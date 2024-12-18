@@ -52,7 +52,7 @@ async function isItEnglish(
       type: "system",
       content: `
       Instruction: Only accept english language in query and no other language.
-      Determine if the user input is English or not based on input as well the previous context of conversation
+      Determine if the user input is English or not based on input as well the previous context of conversation.  Don't be too strict if it is a simple typo.
       \nPrevious context of conversation: "${aiMessageContent}" 
       \nUser Input: "${humanMessageContent}"
       Reply with 'english', or 'gibberish' and no other words`,
